@@ -1,7 +1,7 @@
-﻿data/
-models/saved_models/
+data/
+
 results/
 __pycache__/
 *.pyc
-*.pth
+
 Coal-Hand-Luke.ttf
