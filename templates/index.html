@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NeuralScan — Azerbaijani Handwriting Recognition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0e0e0e;
+      --surface:   #161616;
+      --border:    #2a2a2a;
+      --accent:    #c9a84c;
+      --accent2:   #e8c97a;
+      --text:      #f0ede6;
+      --muted:     #7a7570;
+      --success:   #5fad7e;
+      --error:     #c0504a;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 20px 80px;
+    }
+
+    /* grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    .wrap { position: relative; z-index: 1; width: 100%; max-width: 680px; }
+
+    /* header */
+    header { text-align: center; margin-bottom: 56px; }
+
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2.2rem, 6vw, 3.4rem);
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--text);
+    }
+
+    h1 em {
+      font-style: italic;
+      color: var(--accent2);
+    }
+
+    .subtitle {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    /* divider */
+    .divider {
+      width: 48px; height: 1px;
+      background: var(--accent);
+      margin: 28px auto;
+      opacity: 0.6;
+    }
+
+    /* drop zone */
+    .drop-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: 4px;
+      padding: 48px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+      background: var(--surface);
+    }
+
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: #1c1a15;
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+
+    .drop-icon {
+      font-size: 36px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .drop-label {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .drop-label span {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    /* preview */
+    #preview-wrap {
+      display: none;
+      margin-top: 24px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      background: #111;
+    }
+
+    #preview-wrap img {
+      width: 100%;
+      max-height: 200px;
+      object-fit: contain;
+      display: block;
+      image-rendering: pixelated;
+      padding: 16px;
+    }
+
+    /* button */
+    .btn {
+      display: block;
+      width: 100%;
+      margin-top: 20px;
+      padding: 16px;
+      background: var(--accent);
+      color: #0e0e0e;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .btn:hover { background: var(--accent2); }
+    .btn:active { transform: scale(0.99); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* result */
+    #result-wrap {
+      display: none;
+      margin-top: 32px;
+    }
+
+    .result-label {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .result-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      padding: 24px 28px;
+    }
+
+    .result-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-style: italic;
+      color: var(--accent2);
+      letter-spacing: 0.02em;
+    }
+
+    .result-meta {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* error */
+    .error-box {
+      margin-top: 20px;
+      padding: 14px 18px;
+      background: #1e1212;
+      border: 1px solid #3a1f1f;
+      border-radius: 4px;
+      color: var(--error);
+      font-size: 12px;
+      display: none;
+    }
+
+    /* spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid #0e0e0e;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* stats bar */
+    .stats {
+      margin-top: 48px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .stat {
+      background: var(--surface);
+      padding: 20px;
+      text-align: center;
+    }
+
+    .stat-val {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.6rem;
+      color: var(--accent2);
+    }
+
+    .stat-key {
+      margin-top: 4px;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    footer {
+      margin-top: 56px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Deep Learning · OCR · NLP</p>
+    <h1>Neural<em>Scan</em></h1>
+    <p class="subtitle">Azerbaijani Handwritten Word Recognition</p>
+    <div class="divider"></div>
+  </header>
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="image/*"/>
+    <div class="drop-icon">✍️</div>
+    <p class="drop-label">
+      Drop a handwritten word image here<br/>
+      or <span>click to browse</span>
+    </p>
+  </div>
+
+  <!-- Image Preview -->
+  <div id="preview-wrap">
+    <img id="preview" src="" alt="Preview"/>
+  </div>
+
+  <!-- Recognize Button -->
+  <button class="btn" id="recognizeBtn" disabled>Recognize</button>
+
+  <!-- Error -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- Result -->
+  <div id="result-wrap">
+    <p class="result-label">Recognized Word</p>
+    <div class="result-box">
+      <div class="result-text" id="resultText"></div>
+      <div class="result-meta" id="resultMeta"></div>
+    </div>
+  </div>
+
+  <!-- Model Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-val">53%</div>
+      <div class="stat-key">Word Accuracy</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">0.174</div>
+      <div class="stat-key">CER</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">2,136</div>
+      <div class="stat-key">Training Samples</div>
+    </div>
+  </div>
+
+  <footer>Madina Kylyshkanova · NeuralScan · CRNN + CTC · Azerbaijani Handwriting · DL course Project</footer>
+</div>
+
+<script>
+  const dropZone    = document.getElementById('dropZone');
+  const fileInput   = document.getElementById('fileInput');
+  const preview     = document.getElementById('preview');
+  const previewWrap = document.getElementById('preview-wrap');
+  const btn         = document.getElementById('recognizeBtn');
+  const resultWrap  = document.getElementById('result-wrap');
+  const resultText  = document.getElementById('resultText');
+  const resultMeta  = document.getElementById('resultMeta');
+  const errorBox    = document.getElementById('errorBox');
+
+  let selectedFile = null;
+
+  // drag & drop
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  function handleFile(file) {
+    selectedFile = file;
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+    previewWrap.style.display = 'block';
+    btn.disabled = false;
+    resultWrap.style.display = 'none';
+    errorBox.style.display = 'none';
+  }
+
+  btn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Recognizing...';
+    errorBox.style.display = 'none';
+    resultWrap.style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('image', selectedFile);
+
+    try {
+      const t0 = performance.now();
+      const res = await fetch('/predict', { method: 'POST', body: formData });
+      const data = await res.json();
+      const ms = (performance.now() - t0).toFixed(0);
+
+      if (data.error) throw new Error(data.error);
+
+      resultText.textContent = data.prediction;
+      resultMeta.textContent = `Inference time: ${ms}ms`;
+      resultWrap.style.display = 'block';
+    } catch(err) {
+      errorBox.textContent = 'Error: ' + err.message;
+      errorBox.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Recognize';
+    }
+  });
+</script>
+</body>
+</html>
